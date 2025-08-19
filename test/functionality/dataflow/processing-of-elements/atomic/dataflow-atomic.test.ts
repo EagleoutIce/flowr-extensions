@@ -15,7 +15,9 @@ import { builtInId } from '../../../../../src/dataflow/environments/built-in';
 import { OperatorDatabase } from '../../../../../src/r-bridge/lang-4.x/ast/model/operators';
 import type { FunctionArgument } from '../../../../../src/dataflow/graph/graph';
 import { EmptyArgument } from '../../../../../src/r-bridge/lang-4.x/ast/model/nodes/r-function-call';
-import { UnnamedFunctionCallPrefix } from '../../../../../src/dataflow/internal/process/functions/call/unnamed-call-handling';
+import {
+	UnnamedFunctionCallPrefix
+} from '../../../../../src/dataflow/internal/process/functions/call/unnamed-call-handling';
 import { ReferenceType } from '../../../../../src/dataflow/environments/identifier';
 import { describe } from 'vitest';
 
@@ -110,7 +112,6 @@ describe.sequential('Atomic (dataflow information)', withShell(shell => {
 					.argument(6, 4)
 					.constant(1)
 					.constant(4)
-
 			);
 			assertDataflow(label('chained mixed constant', ['dollar-access', 'single-bracket-access', 'name-normal', 'numbers']), shell,
 				'a[2]$a', emptyGraph()

@@ -5,8 +5,7 @@ import type { Fingerprint } from './fingerprint';
 import { envFingerprint } from './fingerprint';
 import { VisitingQueue } from './visiting-queue';
 import { handleReturns, sliceForCall } from './slice-call';
-import type { DataflowGraph } from '../../dataflow/graph/graph';
-import type {AstIdMap, NormalizedAst} from '../../r-bridge/lang-4.x/ast/model/processing/decorate';
+import type { AstIdMap, NormalizedAst } from '../../r-bridge/lang-4.x/ast/model/processing/decorate';
 import type { SlicingCriteria } from '../criterion/parse';
 import { convertAllSlicingCriteriaToIds } from '../criterion/parse';
 import type { REnvironmentInformation } from '../../dataflow/environments/environment';
@@ -14,36 +13,44 @@ import { initializeCleanEnvironments } from '../../dataflow/environments/environ
 import type { NodeId } from '../../r-bridge/lang-4.x/ast/model/processing/node-id';
 import { VertexType } from '../../dataflow/graph/vertex';
 import { shouldTraverseEdge, TraverseEdge } from '../../dataflow/graph/edge';
-import { getConfig } from '../../config';
-import {RoleInParent} from "../../r-bridge/lang-4.x/ast/model/processing/role";
-import {RType} from "../../r-bridge/lang-4.x/ast/model/type";
-import {collectAllIds} from "../../r-bridge/lang-4.x/ast/model/collect";
+import { RoleInParent } from "../../r-bridge/lang-4.x/ast/model/processing/role";
+import { collectAllIds } from "../../r-bridge/lang-4.x/ast/model/collect";
+import { SliceDirection } from '../../core/steps/all/static-slicing/00-slice';
+import { invertDfg } from '../../dataflow/graph/invert-dfg';
+import type { DataflowInformation } from '../../dataflow/info';
 
 export const slicerLogger = log.getSubLogger({ name: 'slicer' });
 
 /**
- * This returns the ids to include in the static backward slice, when slicing with the given seed id's (must be at least one).
+ * This returns the ids to include in the static slice of the given type, when slicing with the given seed id's (must be at least one).
  * <p>
  * The returned ids can be used to {@link reconstructToCode|reconstruct the slice to R code}.
  *
- * @param graph     - The dataflow graph to conduct the slicing on.
- * @param ast       - The normalized AST of the code (used to get static nesting information of the lexemes in case of control flow dependencies that may have no effect on the slicing scope).
+ * @param info      - The dataflow information used for slicing.
  * @param criteria  - The criteria to slice on.
+ * @param direction - The direction to slice in.
  * @param threshold - The maximum number of nodes to visit in the graph. If the threshold is reached, the slice will side with inclusion and drop its minimal guarantee. The limit ensures that the algorithm halts.
  * @param cache     - A cache to store the results of the slice. If provided, the slice may use this cache to speed up the slicing process.
  */
-export function staticSlicing(
-	graph: DataflowGraph,
+export function staticSlice(
+	info: DataflowInformation,
 	{ idMap }: NormalizedAst,
 	criteria: SlicingCriteria,
-	threshold = getConfig().solver.slicer?.threshold ?? 75,
+	direction: SliceDirection,
+	threshold = 75,
 	cache?: Map<Fingerprint, Set<NodeId>>
 ): Readonly<SliceResult> {
 	guard(criteria.length > 0, 'must have at least one seed id to calculate slice');
 	const decodedCriteria = convertAllSlicingCriteriaToIds(criteria, idMap);
 	expensiveTrace(slicerLogger,
-		() => `calculating slice for ${decodedCriteria.length} seed criteria: ${decodedCriteria.map(s => JSON.stringify(s)).join(', ')}`
+		() => `calculating ${direction} slice for ${decodedCriteria.length} seed criteria: ${decodedCriteria.map(s => JSON.stringify(s)).join(', ')}`
 	);
+
+	let { graph } = info;
+
+	if(direction === SliceDirection.Forward) {
+		graph = invertDfg(graph);
+	}
 
 	const queue = new VisitingQueue(threshold, cache);
 
@@ -96,7 +103,7 @@ export function staticSlicing(
 
 		if(!onlyForSideEffects) {
 			if(currentVertex.tag === VertexType.FunctionCall && !currentVertex.onlyBuiltin) {
-				sliceForCall(current, currentVertex, graph, queue);
+				sliceForCall(current, currentVertex, info, queue);
 			}
 
 			const ret = handleReturns(id, queue, currentEdges, baseEnvFingerprint, baseEnvironment);
@@ -125,7 +132,7 @@ export function staticSlicing(
 		}
 	}
 
-	return { ...queue.status(), decodedCriteria, result: extendSlices(queue.status().result, idMap)};
+	return { ...queue.status(), decodedCriteria, result: extendSlices(queue.status().result, idMap) };
 }
 
 export function updatePotentialAddition(queue: VisitingQueue, id: NodeId, target: NodeId, baseEnvironment: REnvironmentInformation, envFingerprint: string): void {
@@ -138,7 +145,7 @@ export function updatePotentialAddition(queue: VisitingQueue, id: NodeId, target
 		}
 	} else {
 		queue.potentialAdditions.set(target, [id, {
-			id:                 target,
+			id: target,
 			baseEnvironment,
 			envFingerprint,
 			onlyForSideEffects: false

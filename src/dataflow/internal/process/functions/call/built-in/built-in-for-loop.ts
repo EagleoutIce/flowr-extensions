@@ -50,14 +50,14 @@ export function processForLoop<OtherInfo>(
 
 	const writtenVariable = [...variable.unknownReferences, ...variable.in];
 	for(const write of writtenVariable) {
-		headEnvironments = define({ ...write, definedAt: name.info.id, type: ReferenceType.Variable }, false, headEnvironments);
+		headEnvironments = define({ ...write, definedAt: name.info.id, type: ReferenceType.Variable }, false, headEnvironments, data.flowrConfig);
 	}
 	data = { ...data, environment: headEnvironments };
 
 	const body = processDataflowFor(bodyArg, data);
 
 	const nextGraph = headGraph.mergeWith(body.graph);
-	const outEnvironment = appendEnvironment(headEnvironments, body.environment);
+	const outEnvironment = appendEnvironment(headEnvironments, body.environment );
 
 	// now we have to identify all reads that may be effected by a circular redefinition
 	// for this, we search for all reads with a non-local read resolve!
